@@ -8,7 +8,6 @@ import numpy as np
 from sklearn.preprocessing import StandardScaler
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
-import os
 
 def plot_num_var(df, num_var):
     plt.hist(df[num_var], bins=10, edgecolor='k', alpha=1.0)
@@ -80,7 +79,7 @@ def scale(df):
     scaled_df = pd.concat([scaled_df, df['Gender'], df['Location'], df['Season'],
                       df['Subscription Status'], df['Frequency of Purchases']], axis=1)
 
-    print('We use StandardScaler to scale our numeric variables so they are equally weighted\n')
+    # print('We use StandardScaler to scale our numeric variables so they are equally weighted\n')
 
     return scaled_df, sc
 
@@ -109,26 +108,22 @@ def encode(df):
     encoded_and_scaled_df.drop(columns=['Gender', 'Location', 'Season',
                            'Subscription Status', 'Frequency of Purchases'], inplace=True)
 
-    print('KMeans uses numeric variables, so we create dummy variables for categorical variables. This means we create binary columns for each category, with 1 indicating a customer being a part of a category. We replace these dummy variables without our original categorical variables.\n')
+    # print('KMeans uses numeric variables, so we create dummy variables for categorical variables. This means we create binary columns for each category, with 1 indicating a customer being a part of a category. We replace these dummy variables without our original categorical variables.\n')
 
     return encoded_and_scaled_df
 
 def reduce_dimensionality(df):
-    # Define a PCA instance, intending to reduce to 3 dimensions (currently very high with our added dummy variables). We fit this using our encoded and scaled data.
-    pca = PCA(n_components=3)
+    # Define a PCA instance, intending to reduce to dimensions while our number of dimensions account for at least 80% of variance in the data. We fit this using our encoded and scaled data.
+    pca = PCA(n_components=0.8)
     pca.fit(df)
 
     # Apply the PCA transformation, and make a DataFrame we will pass into KMeans.
     pca_df = pd.DataFrame(pca.transform(
-    df), columns=['1', '2', '3'])
-
-    print("KMeans struggles to perform optimal clustering with high dimensionality, or the presence of many variables. Therefore, we can use PCA, Principal Component Analysis, to reduce our dimensions with minimal data loss.\n")
-    print("We specify n_components=3, indicating we want our data to be 3-dimensional\n")
+    df))
 
     return pca_df, pca
 
 def form_clusters(df, pca_df):
-    print('We use KMeans from scikit-learn for clustering, which requires a specified number of clusters. We specify hyperparameter init = \'k-means++\', which optimizes initial cluster centroid selection.\n')
 
     # Define the number of clusters using user input
     num_clusters = int(input(
@@ -145,8 +140,9 @@ def form_clusters(df, pca_df):
 
     # Add a column to our original DataFrame with each customer's cluster value
     df["Clusters"] = labels
+    pd.options.mode.chained_assignment = None
 
-    print('We then store the cluster each customer is in using a new column our original DataFrame\n')
+    print("We have completed clustering.")
 
     return df, kmeans
 
@@ -169,12 +165,9 @@ def predict_cluster(encoded_and_scaled_df, sc, pca, kmeans):
     row = [age, gender, location, season, subscription_status,
        previous_purchases, frequency_of_purchases]
 
-    print('We construct a DataFrame in the format of the DataFrame with our selected features.\n')
     # Make a DataFrame using our inputted values corresponding to each column of updated_df, and we set our column values to be those of updated_df (same order)
     sample = pd.DataFrame([row], columns=['Age', 'Gender', 'Location', 'Season',
                       'Subscription Status', 'Previous Purchases', 'Frequency of Purchases'])
-
-    print('We transform the customer\'s numeric data using the previously fitted StandardScaler object.\n')
 
     # Scale numeric features for the new customer using the previous StandardScaler instance we fitted (using the same model)
     scaled_sample = pd.DataFrame(sc.transform(
@@ -182,9 +175,6 @@ def predict_cluster(encoded_and_scaled_df, sc, pca, kmeans):
     # Add categorical variables to the scaled data
     scaled_sample = pd.concat([scaled_sample, sample['Gender'], sample['Location'], sample['Season'],
                           sample['Subscription Status'], sample['Frequency of Purchases']], axis=1)
-
-    print('We add the binary columns from our encoded and scaled DataFrame for the customer, setting values to 1 or 0 depending on if the customer is part of a category or not.\n')
-    print('We then drop the original categorical variables.\n')
 
 
     # Gets a list of our original encoded and scaled DataFrame columns, ignoring the first two since we already have Age and Previous Purchases
@@ -207,14 +197,10 @@ def predict_cluster(encoded_and_scaled_df, sc, pca, kmeans):
     # Drop the original categorical variables since we have encoded categorical variables
     encoded_and_scaled_sample.drop(columns=[
                                'Gender', 'Location', 'Season', 'Subscription Status', 'Frequency of Purchases'], inplace=True)
-    
-    print('Using the PCA model we fitted for our dataset, we can transform the customer\'s scaled and encoded variables to fit the format of the data we used for our KMeans model.\n')
 
     # Transforms the encoded and scaled sample using our previously fitted PCA instance (for dimensality reduction), and converts this into a DataFrame
     pca_sample = pd.DataFrame(pca.transform(
-        encoded_and_scaled_sample), columns=['1', '2', '3'])
-    
-    print('We retrieve the cluster the customer is in by making a prediction, and we store this so we can access similar customers.\n')
+        encoded_and_scaled_sample))
 
     # Makes a prediction of the 3-dimension sample using the fitted KMeans, and retrieves the cluster value
     [cluster] = kmeans.predict(pca_sample)
@@ -224,12 +210,8 @@ def predict_cluster(encoded_and_scaled_df, sc, pca, kmeans):
 def make_recommendations(df, cluster):
     similar_customers = df.loc[df["Clusters"] == cluster]
 
-    print('We retrieve customers in the same cluster as the customer and store similar customers that purchased products, and gave the products at least a 3/5 rating, to generate potential recommendations.')
-
     # Reduces potential recommendations to those with at least 3/5 star reviews for the products similar customers bought
     potential_recommendations = df[df['Review Rating'] >= 3]
-
-    print('We make a list of potential recommendations by listing potential recommendations in order of decreasing frequency.\n')
 
     # Retrieves counts for the potential recommendations
     items = potential_recommendations['Item Purchased'].value_counts()
@@ -243,9 +225,9 @@ def make_recommendations(df, cluster):
     # Prints the [num_recs] products with the highest frequencies in items
     for i in range(num_recs):
         print(items.index[i])
+    print()
     
 def visualize(df, cluster, sample):
-    print('We have created a column to store the colors we want to plot each customer as (based on the cluster they are in).\n')
 
     # Creates a Colors column for visualization, labeling customers in the same cluster as the customer we made predictions on as orange, and all others as blue
     for index in df.index:
@@ -291,11 +273,17 @@ def preprocess(selected_features_df, df):
     # Scales our numeric data
     scaled_df, sc = scale(selected_features_df)
 
+    print("We have standardized our numeric data. This centers our data at mean 0 with standard deviation 1.\n")
+
     # Encodes our categorical variables
     encoded_and_scaled_df = encode(scaled_df)
 
+    print("We have encoded our categorical data. KMeans only uses numeric variables, so we can turn each categorical variable into many numeric variables by creating a binary column for each category, with 1 meaning a user is a part of that category and 0 meaning a user is not a part of that category.\n")
+
     # Reduces dimensionality
     pca_df, pca = reduce_dimensionality(encoded_and_scaled_df)
+
+    print("KMeans doesn't work well with high dimensionality, so we transform our data into principal components (lower dimensionality) with minimal data loss.\n")
 
     # Forms clusters
     selected_features_df, kmeans = form_clusters(selected_features_df, pca_df)
@@ -326,7 +314,7 @@ def main():
     selected_features_df = df[['Age', 'Gender', 'Location', 'Season',
                                'Subscription Status', 'Previous Purchases', 'Frequency of Purchases']]
     
-    print("We will now visualize our numeric variables to identify potential outliers, since KMeans is sensitive to outliers.\n")
+    print("We will now visualize our numeric variables to identify potential outliers, since KMeans, the clustering algorithm we are using, is sensitive to outliers.\n")
 
     # Plots a histogram to detect any ages that appear to be outliers
     # There are no outliers
@@ -339,7 +327,7 @@ def main():
     print('We will now visualize association between variables since multicollinearity is problematic for KMeans, giving disproportionately high weight to highly corrleated variables.\n')
     visualize_assocations(selected_features_df)
 
-    print("We will now begin to preprocess our data by scaling, encoding categorical variables, and reducing dimensionality\n")
+    print("We will now begin to preprocess our data by standardizing numeric variables, encoding categorical variables, and reducing dimensionality\n")
     preprocess(selected_features_df, df)
 
 if __name__ == "__main__":
