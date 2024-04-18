@@ -301,6 +301,7 @@ def preprocess(selected_features_df, df):
 def main():
     # This silences FutureWarnings
     warnings.simplefilter(action='ignore', category=FutureWarning)
+    pd.options.mode.chained_assignment = None  # default='warn
 
     print("Reading customer data.\n")
 
